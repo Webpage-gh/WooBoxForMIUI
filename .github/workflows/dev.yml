@@ -46,7 +46,6 @@ jobs:
         KS_PASS: citestpass
       run: |
         set -euo pipefail
-        which -a zipalign apksigner || true
         bt=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
         echo "Using build-tools: $bt"
         apk=$(ls app/build/outputs/apk/release/*.apk | head -1)
@@ -69,3 +68,4 @@ jobs:
       with:
         name: WooBox_Release
         path: ${{ steps.sign.outputs.apk }}
+        archive: true
