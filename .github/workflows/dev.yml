@@ -23,7 +23,7 @@ jobs:
 
     - name: Build with Gradle
       run: bash ./gradlew assembleRelease
-        
+
     - name: Generate throwaway keystore
       id: throwaway
       run: |
@@ -37,30 +37,35 @@ jobs:
           -keysize 2048 \
           -validity 365 \
           -dname "CN=WooBox CI Test, OU=CI, O=WooBox, L=NA, ST=NA, C=NA"
-        echo "keystore=$(base64 -w0 "$RUNNER_TEMP/ci-test.jks")" >> "$GITHUB_OUTPUT"
+        echo "keystore=$RUNNER_TEMP/ci-test.jks" >> "$GITHUB_OUTPUT"
 
     - name: Sign Release APK
       if: success()
-      id: sign_debug
-      uses: r0adkll/sign-android-release@v1.0.4
-      with:
-        releaseDirectory: ./app/build/outputs/apk/release
-        signingKeyBase64: ${{ steps.throwaway.outputs.keystore }}
-        alias: citestkey
-        keyStorePassword: citestpass
-        keyPassword: citestpass
-        
-    - name: Rename signed APK
-      if: success()
-      id: renamed
+      id: sign
+      env:
+        KS_PASS: citestpass
       run: |
-        out="$RUNNER_TEMP/WooBoxForMIUI-$(grep -m1 'versionName' app/build.gradle.kts | sed -E 's/.*"(.*)".*/\1/')-ci-testkey.apk"
-        cp "${{ steps.sign_debug.outputs.signedReleaseFile }}" "$out"
+        set -euo pipefail
+        which -a zipalign apksigner || true
+        bt=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+        echo "Using build-tools: $bt"
+        apk=$(ls app/build/outputs/apk/release/*.apk | head -1)
+        ver=$(grep -m1 'versionName' app/build.gradle.kts | sed -E 's/.*"(.*)".*/\1/')
+        out="$RUNNER_TEMP/WooBoxForMIUI-$ver-ci-testkey.apk"
+        "$bt/zipalign" -f -p 4 "$apk" "$RUNNER_TEMP/aligned.apk"
+        "$bt/apksigner" sign \
+          --ks "${{ steps.throwaway.outputs.keystore }}" \
+          --ks-key-alias citestkey \
+          --ks-pass env:KS_PASS \
+          --key-pass env:KS_PASS \
+          --out "$out" \
+          "$RUNNER_TEMP/aligned.apk"
+        "$bt/apksigner" verify --print-certs "$out"
         echo "apk=$out" >> "$GITHUB_OUTPUT"
-        
+
     - name: Upload Release APK
       if: success()
       uses: actions/upload-artifact@v7
       with:
         name: WooBox_Release
-        path: ${{ steps.renamed.outputs.apk }}
+        path: ${{ steps.sign.outputs.apk }}
