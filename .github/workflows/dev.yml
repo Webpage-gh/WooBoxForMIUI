@@ -24,21 +24,43 @@ jobs:
     - name: Build with Gradle
       run: bash ./gradlew assembleRelease
         
+    - name: Generate throwaway keystore
+      id: throwaway
+      run: |
+        keytool -genkeypair -v \
+          -keystore "$RUNNER_TEMP/ci-test.jks" \
+          -storetype PKCS12 \
+          -storepass citestpass \
+          -keypass citestpass \
+          -alias citestkey \
+          -keyalg RSA \
+          -keysize 2048 \
+          -validity 365 \
+          -dname "CN=WooBox CI Test, OU=CI, O=WooBox, L=NA, ST=NA, C=NA"
+        echo "keystore=$(base64 -w0 "$RUNNER_TEMP/ci-test.jks")" >> "$GITHUB_OUTPUT"
+
     - name: Sign Release APK
       if: success()
       id: sign_debug
       uses: r0adkll/sign-android-release@v1.0.4
       with:
         releaseDirectory: ./app/build/outputs/apk/release
-        signingKeyBase64: ${{ secrets.SIGNING_KEY }}
-        alias: ${{ secrets.KEY_STORE_ALIAS }}
-        keyStorePassword: ${{ secrets.KEY_STORE_PASSWORD }}
-        keyPassword: ${{ secrets.KEY_STORE_PASSWORD }}
+        signingKeyBase64: ${{ steps.throwaway.outputs.keystore }}
+        alias: citestkey
+        keyStorePassword: citestpass
+        keyPassword: citestpass
+        
+    - name: Rename signed APK
+      if: success()
+      id: renamed
+      run: |
+        out="$RUNNER_TEMP/WooBoxForMIUI-$(grep -m1 'versionName' app/build.gradle.kts | sed -E 's/.*"(.*)".*/\1/')-ci-testkey.apk"
+        cp "${{ steps.sign_debug.outputs.signedReleaseFile }}" "$out"
+        echo "apk=$out" >> "$GITHUB_OUTPUT"
         
     - name: Upload Release APK
       if: success()
       uses: actions/upload-artifact@v7
       with:
         name: WooBox_Release
-        path: ${{ steps.sign_debug.outputs.signedReleaseFile }}
-        archive: false
+        path: ${{ steps.renamed.outputs.apk }}
