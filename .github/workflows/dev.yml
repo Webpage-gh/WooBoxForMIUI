@@ -11,9 +11,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v7
     - name: set up JDK 11
-      uses: actions/setup-java@v3
+      uses: actions/setup-java@v6
       with:
         java-version: '11'
         distribution: 'temurin'
@@ -30,21 +30,23 @@ jobs:
       
     - name: Build with Gradle
       run: |
-        bash ./gradlew assembleDebug
+        bash ./gradlew assembleRelease
         
     - name: Sign Debug APK
       if: success()
       id: sign_debug
       uses: r0adkll/sign-android-release@v1.0.4
       with:
-        releaseDirectory: ./app/build/outputs/apk/debug
+        releaseDirectory: ./app/build/outputs/apk/release
         signingKeyBase64: ${{ secrets.SIGNING_KEY }}
         alias: ${{ secrets.KEY_STORE_ALIAS }}
         keyStorePassword: ${{ secrets.KEY_STORE_PASSWORD }}
         keyPassword: ${{ secrets.KEY_STORE_PASSWORD }}
         
-    - name: Upload Debug APK
-      uses: actions/upload-artifact@v2
+    - name: Upload Release APK
+      if: success()
+      uses: actions/upload-artifact@v7
       with:
-        name: WooBox_Debug
+        name: WooBox_Release
         path: ${{ steps.sign_debug.outputs.signedReleaseFile }}
+        archive: false
